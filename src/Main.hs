@@ -13,6 +13,8 @@ import Prelude hiding (id,(.))
 import Base
 import Auto
 import Network.HTTP
+import Data.Time
+
 zero :: Int
 zero = 0
 
@@ -59,7 +61,12 @@ worker1 = proc chan -> do
 -- Uses async to start a new thread
 getURLSum :: AutoX IO String Int
 getURLSum = proc s -> do
-    body <- async (simpleHTTP . getRequest >=> getResponseBody) -< s
+    body <- async (\a -> do
+        getCurrentTime >>= print
+        threadDelay 1000000
+        response <- simpleHTTP (getRequest a) 
+        getResponseBody response
+        ) -< s
     res <- worker -< body
     id -< length res
 

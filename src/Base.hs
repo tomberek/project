@@ -35,12 +35,6 @@ register name f = do
     evs <- takeMVar eventHandlers
     putMVar eventHandlers $ M.insert name f evs !> "register "++ show name
 
-inject :: (r -> Maybe a-> IO ()) -> AutoX IO r a -> AutoX IO r a
-inject io ra = AConsX $ \state -> do
-    (res, out) <- runAutoX ra state
-    io state res
-    return (res, inject io out)
-
 runEvent :: (MonadIO m) => EvType -> AutoX m a b
 runEvent name = AConsX $ \input -> do
     this <- liftIO $ takeMVar eventHandlers
