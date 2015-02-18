@@ -3,11 +3,11 @@
 module Main where
 
 import           Auto
-import           Control.Applicative
+
 import           Control.Arrow
 import           Control.Category
 import           Control.Concurrent
-import           Control.Monad          (liftM)
+
 import           Control.Monad.IO.Class
 import           Control.Monad.Parallel as P
 import           Control.Monad.State
@@ -16,12 +16,13 @@ import           Data.Maybe
 import           Data.Time
 import           Network.HTTP
 import           Prelude                hiding (id, (.))
-import           System.IO
+
 import           System.IO.Unsafe
 
 zero :: Int
 zero = 0
 
+-- uses global state
 pricer :: AutoX IO (Event Int) Int
 pricer = AConsX $ \(Event n v) -> do
     _ <- runA n v
@@ -29,7 +30,8 @@ pricer = AConsX $ \(Event n v) -> do
     b <- runA P zero
     return (Just $ a*b,pricer) !> "pricer: " ++ show (a,b)
 
-pricer2 :: AutoX IO (Event Int) Int
+-- NO global state
+pricer2 :: Monad m => AutoX m (Event Int) Int
 pricer2 = proc (Event n v) -> do
     p <- if n==P then id -< v else id -< 0
     q <- if n==Q then id -< v else id -< 0
@@ -37,8 +39,8 @@ pricer2 = proc (Event n v) -> do
     b <- summer -< q
     id -< (a*b) !> "pricer2: " ++ show (a,b)
 
-summer3 :: AutoX IO Int Int
-summer3 = summer
+summerIO :: AutoX IO Int Int
+summerIO = summer
 
 -- creates channels and sparks a thread to fill them
 async :: MonadIO m => (b->IO a) -> AutoX m b (Chan a)
@@ -50,7 +52,10 @@ async recieve = AConsX $ \a -> liftIO $ do
 -- Uses IO to show an async prompt
 getText :: AutoX IO String (Chan String)
 getText = async (\b -> print b >> getLine)
+
+comp :: AutoX IO String String
 comp = getText >>> worker >>> arr reverse
+
 -- Works a channel by waiting until it is finished or data is available.
 worker :: AutoX IO (Chan t) t
 worker = arrM readChan
@@ -86,15 +91,15 @@ doTwice f = f *** f
 sequenceW :: MonadParallel m => AutoX m a b -> AutoX m [a] [b]
 sequenceW as = AConsX $ \ss -> do
     res <- P.mapM (runAutoX as) ss
-    return (Prelude.sequence $ map fst res,sequenceW as)
+    return (Prelude.mapM fst res,sequenceW as)
 
 main :: IO ()
 main = do
     out <- testAutoM_ pricer2 eventList
     print $ show out
 
-    register Q summer3
-    register P summer3
+    register Q summerIO
+    register P summerIO
     out2 <- testAutoM_ pricer eventList
     print $ show out2
 
@@ -103,13 +108,13 @@ main = do
     --out4 <- testAutoM_ getPair2 [("http://www.google.com","http://example.com")]
     --print $ show out4
 
-    (out5,_) <- runAutoX (sequenceW $ getURLSum1) ["http://www.google.com","http://example.com","http://www.cnn.com"]
+    (out5,_) <- runAutoX (sequenceW getURLSum1) ["http://www.google.com","http://example.com","http://www.cnn.com"]
     print out5
 
     (out6,_) <- runAutoX comp "reversing prompt: "
     print out6
 
--- ***************** HELPING Functions
+-- ***************** HELPING Functions ******
 (!>) :: a -> b -> a
 (!>) = const .id
 infixr 0 !>
