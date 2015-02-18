@@ -75,13 +75,12 @@ getText = async getLine
 
 getHTTP = simpleHTTP . getRequest
 
-worker :: AutoX IO (Chan String) Int
+worker :: AutoX IO (Chan String) String
 worker = AConsX $ \chan -> do
     r <- readChan chan
     res <- getHTTP r
     body <- getResponseBody res
-    let len = length . words $ body
-    return (Just len,pure len)
+    return (Just body,pure body)
 
 sumIt :: AutoX IO (Chan String) ()
 sumIt = proc a -> do
