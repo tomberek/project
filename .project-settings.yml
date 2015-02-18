@@ -12,5 +12,4 @@ version: 1
 extra-packages: ! 'Hackage: monad-parallel 0.7.1.4'
 ghc-args:
 - -fdefer-type-errors
-excluded-modules:
-- src/Base.hs
+excluded-modules: []
