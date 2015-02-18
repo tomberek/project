@@ -103,7 +103,7 @@ main = do
     out2 <- testAutoM_ pricer eventList
     putStrLn $ show out2
 
-    out4 <- testAutoM_ getURLSum ["http://www.google.com","http://tomberek.info"]
+    out4 <- testAutoM_ getURLSum ["http://www.google.com","http://example.com"]
     putStrLn $ show out4
 
  {-
