@@ -14,6 +14,7 @@ import Base
 import Auto
 import Network.HTTP
 import Data.Time
+import Control.Monad.Parallel as P
 
 zero :: Int
 zero = 0
@@ -59,19 +60,43 @@ worker1 = proc chan -> do
     returnA -< r
 
 -- Uses async to start a new thread
-getURLSum :: AutoX IO String Int
+getURLSum :: AutoX IO String (Chan String)
 getURLSum = proc s -> do
     body <- async (\a -> do
         getCurrentTime >>= print
         threadDelay 1000000
-        response <- simpleHTTP (getRequest a) 
+        response <- simpleHTTP (getRequest a)
         getResponseBody response
         ) -< s
-    res <- worker -< body
-    id -< length res
+    returnA -< body
 
-getPair :: AutoX IO (String,String) (Int,Int)
-getPair = getURLSum *** getURLSum
+getURLSum1 :: AutoX IO String Int
+getURLSum1 = proc s -> do
+    body <- arrM (\a -> do
+        getCurrentTime >>= print
+        threadDelay 1000000
+        response <- simpleHTTP (getRequest a)
+        getResponseBody response
+        ) -< s
+    returnA -< length body
+
+workerURL :: AutoX IO (Chan String) Int
+workerURL = worker1 >>> arr length
+
+-- The two below are different in behavior.
+-- getPair is parallel
+-- getPair2 is sequential
+getPair,getPair2 :: AutoX IO (String,String) (Int,Int)
+getPair = (getURLSum *** getURLSum) >>> (workerURL *** workerURL)
+getPair2 = (getURLSum >>> workerURL) *** (getURLSum >>> workerURL)
+
+doTwice :: Monad m => AutoX m a b -> AutoX m (a,a) (b,b)
+doTwice f = f *** f
+
+sequenceW :: MonadParallel m => AutoX m a b -> AutoX m [a] [b]
+sequenceW as = AConsX $ \ss -> do
+    res <- P.mapM (runAutoX as) ss
+    return (Prelude.sequence $ map fst res,sequenceW as)
 
 main :: IO ()
 main = do
@@ -83,9 +108,13 @@ main = do
     out2 <- testAutoM_ pricer eventList
     print $ show out2
 
-    out4 <- testAutoM_ getPair [("http://www.google.com","http://example.com")]
-    print $ show out4
-    threadDelay 1000000
+    --out3 <- testAutoM_ getPair [("http://www.google.com","http://example.com")]
+    --print $ show out3
+    --out4 <- testAutoM_ getPair2 [("http://www.google.com","http://example.com")]
+    --print $ show out4
+
+    (out5,_) <- runAutoX (sequenceW $ getURLSum1) ["http://www.google.com","http://example.com","http://www.cnn.com"]
+    print $ out5
 
  {-
     runTransient $ do
