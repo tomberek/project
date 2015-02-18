@@ -6,12 +6,12 @@
 
 module Auto where
 
-import Control.Applicative
-import Control.Arrow
-import Control.Category
-import Control.Monad
+import           Control.Applicative
+import           Control.Arrow
+import           Control.Category
+import           Control.Monad
 --import Control.Monad.Fix
-import Prelude hiding      ((.), id)
+import           Prelude             hiding (id, (.))
 
 -- | The AutoX type: Auto with on/off behavior and effectful stepping.
 newtype AutoX m a b = AConsX { runAutoX :: a -> m (Maybe b, AutoX m a b) }

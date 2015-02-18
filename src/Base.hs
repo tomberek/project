@@ -20,7 +20,7 @@ import Control.Monad.IO.Class
 (!>) = const .id
 infixr 0 !>
 
-data EvType = Q | P deriving (Show, Eq, Ord, Enum, Bounded)
+data EvType = Q | P deriving (Show, Eq, Ord, Enum, Bounded,Read)
 data Event a = Event EvType a deriving Show
 eventList :: [Event Int]
 eventList=[ Event Q 10, Event P 2, Event P 3
@@ -46,7 +46,7 @@ runEvent name = AConsX $ \input -> do
     liftIO $ putMVar eventHandlers $ M.insert name out this !> "put back in"
     return (res,out)
 
-runA :: MonadIO m => EvType -> a -> m b
+runA :: EvType -> a -> IO b
 runA event value = liftM (fromJust . fst) $ runAutoX (runEvent event) value
 {-
 data Loop= Once | Loop | Multithread deriving Eq
