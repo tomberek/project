@@ -1,5 +1,5 @@
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RecursiveDo #-}
+-- {-# LANGUAGE RecursiveDo #-}
 -- http://blog.jle.im/entry/effectful-recursive-real-world-autos-intro-to-machine
 --
 -- Auto with on/off behavior and effectful stepping.
@@ -10,8 +10,7 @@ import Control.Applicative
 import Control.Arrow
 import Control.Category
 import Control.Monad
-import Data.Functor.Identity
-import Control.Monad.Fix
+--import Control.Monad.Fix
 import Prelude hiding      ((.), id)
 
 -- | The AutoX type: Auto with on/off behavior and effectful stepping.
@@ -24,7 +23,7 @@ testAutoM a (x:xs)  = do
     return (y:ys, a'')
 
 testAutoM_ :: Monad m => AutoX m a b -> [a] -> m [Maybe b]
-testAutoM_ a as = testAutoM a as >>= return . fst
+testAutoM_ a as = liftM fst $ testAutoM a as
 -- | Instances
 instance Monad m => Category (AutoX m) where
     id    = AConsX $ \x -> return (Just x, id)

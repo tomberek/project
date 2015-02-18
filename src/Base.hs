@@ -5,25 +5,18 @@
 module Base where
 -- /show
 
-import Unsafe.Coerce
 import System.IO.Unsafe
-import Control.Applicative
 import qualified Data.Map as M
-import Data.Dynamic
-import Debug.Trace
-import Data.Monoid
+--import Debug.Trace
 
---import Data.IORef
+import Control.Monad (liftM)
 import Control.Concurrent
-import Control.Concurrent.STM
-import GHC.Conc
 import Data.Maybe
-import System.Mem.StableName
-import Data.List
 import Auto
 import Control.Monad.IO.Class
 
 --(!>) = flip trace 
+(!>) :: a -> b -> a
 (!>) = const .id
 infixr 0 !>
 
@@ -37,6 +30,7 @@ eventList=[ Event Q 10, Event P 2, Event P 3
 eventHandlers :: MVar (M.Map EvType (AutoX m a b))
 eventHandlers = unsafePerformIO $ newMVar M.empty
 
+register :: EvType -> AutoX m a b -> IO ()
 register name f = do
     evs <- takeMVar eventHandlers
     putMVar eventHandlers $ M.insert name f evs !> "register "++ show name
@@ -58,7 +52,8 @@ runEvent name = AConsX $ \input -> do
     liftIO $ putMVar eventHandlers $ M.insert name out this !> "put back in"
     return (res,out)
 
-runA event value = runAutoX (runEvent event) value >>= return . fromJust . fst
+runA :: MonadIO m => EvType -> a -> m b
+runA event value = liftM (fromJust . fst) $ runAutoX (runEvent event) value
 {-
 data Loop= Once | Loop | Multithread deriving Eq
 
