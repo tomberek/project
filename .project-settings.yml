@@ -9,8 +9,11 @@ environment: ghc-7.8-unstable
 auto-hidden: []
 cabal-file: project.cabal
 version: 1
-extra-packages: ! 'Hackage: monad-parallel 0.7.1.4'
+extra-packages: ! 'Hackage: monad-parallel 0.7.1.4
+
+'
 ghc-args:
-- -Wall
 - -fdefer-type-errors
+- -fno-warn-unused-matches
+- -fno-warn-unused-binds
 excluded-modules: []

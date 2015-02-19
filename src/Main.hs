@@ -1,23 +1,35 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE Arrows               #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Main where
-
-import           Auto
-
 import           Control.Arrow
+import           Prelude                   hiding (id, (.))
 import           Control.Category
+import Control.Applicative
 import           Control.Concurrent
 
-import           Control.Monad.IO.Class
-import           Control.Monad.Parallel as P
+import           Control.Monad.Trans --mtl
 import           Control.Monad.State
-import qualified Data.Map               as M
+import           Control.Monad.Cont
+
+import           Control.Monad.Parallel    as P
+import qualified Data.Map                  as M
 import           Data.Maybe
 import           Data.Time
 import           Network.HTTP
-import           Prelude                hiding (id, (.))
-
 import           System.IO.Unsafe
+import Unsafe.Coerce
+import Data.Typeable
+import Control.Concurrent.Async
+import           Auto
+import Data.Dynamic
+import System.IO
 
 zero :: Int
 zero = 0
@@ -43,15 +55,15 @@ summerIO :: AutoX IO Int Int
 summerIO = summer
 
 -- creates channels and sparks a thread to fill them
-async :: MonadIO m => (b->IO a) -> AutoX m b (Chan a)
-async recieve = AConsX $ \a -> liftIO $ do
-    chan <- newChan
-    _ <- forkIO $ recieve a >>= writeChan chan
-    return (Just chan,async recieve)
+async' :: MonadIO m => (b->IO a) -> AutoX m b (Chan a)
+async' recieve = AConsX $ \a -> liftIO $ do
+    i <- newChan
+    _ <- forkIO $ recieve a >>= writeChan i
+    return (Just i,async' recieve)
 
 -- Uses IO to show an async prompt
 getText :: AutoX IO String (Chan String)
-getText = async (\b -> print b >> getLine)
+getText = async' (\b -> print b >> getLine)
 
 comp :: AutoX IO String String
 comp = getText >>> worker >>> arr reverse
@@ -69,7 +81,7 @@ processURL a = do
 
 -- Uses async to start a new thread
 getURLSum :: AutoX IO String (Chan String)
-getURLSum = async processURL
+getURLSum = async' processURL
 
 -- uses sequence instead of async
 getURLSum1 :: AutoX IO String Int
@@ -93,8 +105,63 @@ sequenceW as = AConsX $ \ss -> do
     res <- P.mapM (runAutoX as) ss
     return (Prelude.mapM fst res,sequenceW as)
 
+summer2 :: AutoX (StateT Int IO) Int Int
+summer2 = proc c -> do
+    st <- arrM (\_ -> get) -< ()
+    arrM (\a -> modify ((+) a)) -< c
+    returnA -< st + c
+
+{-# NOINLINE buffer #-}
+buffer :: MVar a
+buffer= unsafePerformIO $ newEmptyMVar
+{-# NOINLINE rexit #-}
+rexit= unsafePerformIO newEmptyMVar
+stay= takeMVar rexit
+
+eventLoop :: AutoX (StateT [Chan a] IO) a b -> [Chan a] -> Chan b -> IO ()
+eventLoop stuff inputChan outChan = do
+    print $ "entered " ++ (show $ length inputChan)
+    input <- readChan $ head inputChan
+    ((mb2,out),b1) <- flip runStateT inputChan $ runAutoX stuff input
+    putStr "State Length: "
+    print $ length b1
+    case mb2 of
+        Just mb -> print "writing" >> writeChan outChan mb >> print "didit"
+        Nothing -> print "Nothing" >> return ()
+    putStr " looping"
+    eventLoop out inputChan outChan
+instance Monad (AutoX (StateT [Chan a] IO) a) where
+    return = pure
+    mx >>= f = AConsX $ \a -> do
+        outchan <- liftIO newChan
+        inchan <- liftIO newChan
+        chans <- get
+        _ <- liftIO $ forkIO $ eventLoop mx chans outchan
+        modify $ (:) inchan
+        liftIO $ writeChan inchan a
+        result <- liftIO $ readChan outchan
+        let cont = f result
+        runAutoX cont a
+---}
+loopIt x = x >> loopIt x
 main :: IO ()
 main = do
+    input <- newChan
+    writeChan input "help"
+    ((Just moutput,_),inputChans::[Chan String]) <- flip runStateT [input] $ runAutoX (do
+       arrM (const . liftIO $ putStr "1:" >> hFlush stdout >> getLine >>= print . (++) "1a: " >> hFlush stdout >> return "done1")
+       arrM (const . liftIO $ putStr "2:" >> hFlush stdout >> getLine >>= print . (++) "2a: " >> hFlush stdout >> return "done2")
+       arrM (const . liftIO $ putStr "3:" >> hFlush stdout >> getLine >>= print . (++) "3a: " >> hFlush stdout >> return "done3")
+       arrM (const . liftIO $ print "4:" >> hFlush stdout >> threadDelay (1000 * 100) >> return "done4")
+       ) "hi"
+    putStr "inputChans length "
+    print $ length inputChans
+    writeChan input "help"
+    --writeChan (inputChans!!3) "go"
+
+    print moutput
+    stay
+    {--
     out <- testAutoM_ pricer2 eventList
     print $ show out
 
@@ -102,7 +169,26 @@ main = do
     register P summerIO
     out2 <- testAutoM_ pricer eventList
     print $ show out2
+    stay
+    ---}
+{--
+asyncIO io = AConsX $ \a -> do
+    b <- liftIO $ tryTakeMVar buffer
+    case b of
+        Nothing -> do
+            mvar <- liftIO $ newEmptyMVar
+            liftIO $ forkIO $ do
+                r <- io
+                ((Just r2,_),_) <- liftIO $ flip runStateT (_) $ runAutoX (unsafeCoerce _ r) a
+                putMVar mvar r2
+            --res <- liftIO $ readMVar mvar
+            return (Just mvar,asyncIO io) --asyncIO io)
+        Just (r,e) -> return (r,e)
+        where
+            loop io x = io >>= x >> loop io x
+---}
 
+    {--
     out3 <- testAutoM_ getPair [("http://www.google.com","http://example.com")]
     print $ show out3
     --out4 <- testAutoM_ getPair2 [("http://www.google.com","http://example.com")]
@@ -113,6 +199,7 @@ main = do
 
     (out6,_) <- runAutoX comp "reversing prompt: "
     print out6
+    ---}
 
 -- ***************** HELPING Functions ******
 (!>) :: a -> b -> a
