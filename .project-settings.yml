@@ -1,6 +1,8 @@
 binary-ghc-args:
-- -O
+- -O2
 - -threaded
+- -ddump-simpl-stats
+- -fenable-rewrite-rules
 module-template: ! 'module MODULE_NAME where
 
 '
@@ -9,11 +11,15 @@ environment: ghc-7.8-unstable
 auto-hidden: []
 cabal-file: project.cabal
 version: 1
-extra-packages: ! 'Hackage: monad-parallel 0.7.1.4
+extra-packages: ! 'Hackage: haskell-src 1.0.2.0
+
+  Hackage: CCA 0.1.5.2
 
 '
 ghc-args:
-- -fdefer-type-errors
 - -fno-warn-unused-matches
 - -fno-warn-unused-binds
-excluded-modules: []
+- -ddump-simpl-stats
+- -fenable-rewrite-rules
+excluded-modules:
+- src/Examples.hs

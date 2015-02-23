@@ -1,18 +1,77 @@
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TupleSections #-}
--- {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE Arrows #-}
 -- http://blog.jle.im/entry/effectful-recursive-real-world-autos-intro-to-machine
 --
 -- Auto with on/off behavior and effectful stepping.
 
 module Auto where
 
-import           Control.Applicative
-import           Control.Arrow
-import           Control.Category
-import           Control.Monad
---import Control.Monad.Fix
-import           Prelude             hiding (id, (.))
+import Control.Applicative
+import Control.Arrow
+import Control.Category
+import Control.Monad
+import Control.Monad.Fix
+import Arrow
+import Prelude             hiding (id, (.))
+import Control.Concurrent.Async
+import Network.HTTP
+import Data.Time
+import Control.Concurrent (threadDelay)
 
+newtype AutoXIO a b = AutoXIO {runAutoXIO :: AutoX IO a b} deriving (Functor,Applicative,Category,Alternative,ArrowChoice,ArrowInit,ArrowLoop)
+autoIO :: (a -> IO (Maybe b, AutoX IO a b)) -> AutoXIO a b
+autoIO = AutoXIO . AConsX
+runAutoIO :: AutoXIO a b -> a -> IO (Maybe b, AutoX IO a b)
+runAutoIO = runAutoX . runAutoXIO
+instance Arrow (AutoXIO) where
+    arr :: (b -> c) -> AutoXIO b c
+    arr f     = AutoXIO $ AConsX $ \b -> return (Just $ f b,arr f)
+    first (AutoXIO a)   = AutoXIO $ first a
+    second (AutoXIO a)   = AutoXIO $ second a
+    a1 *** a2 = autoIO $ \(x1, x2) -> do
+        ( (y1,a1') , (y2,a2') ) <- concurrently (runAutoIO a1 x1) (runAutoIO a2 x2)
+        return  (liftA2 (,) y1 y2, a1' *** a2')
+    a1 &&& a2 = autoIO $ \x -> do
+        ( (y1,a1') , (y2,a2') ) <- concurrently (runAutoIO a1 x) (runAutoIO a2 x)
+        return (liftA2 (,) y1 y2, a1' &&& a2')
+
+arrIO :: (a -> IO b) -> AutoXIO a b
+arrIO action = AutoXIO $ AConsX $ \a -> do
+    b <- action a
+    return (Just b,runAutoXIO $ arrIO action)
+--}
+getURLSum :: Arr f IO String Int
+getURLSum = Arr length <<< ArrM processURL
+
+processURL :: String -> IO String
+processURL a = do
+    getCurrentTime >>= print
+    threadDelay 1000000
+    response <- simpleHTTP (getRequest a)
+    getResponseBody response
+
+--line1 :: AutoXIO (String, String) ()
+line1 :: Arr f IO (String, String) ()
+line1 = proc (n,g) -> do
+    a <- getURLSum -< n
+    d <- getURLSum -< g
+    b <- Arr length -< n
+    c <- ArrM (\input -> do
+               print input
+               print ":"
+               read <$> getLine) -< n
+    _ <- ArrM print -< a + c + d
+    returnA -< ()
+
+--line2 :: AutoXIO (String,String) (Int)
+line2 = proc (x,y) -> do
+    a <- getURLSum -< x
+    b <- getURLSum -< y
+    returnA -< a + b
 -- | The AutoX type: Auto with on/off behavior and effectful stepping.
 newtype AutoX m a b = AConsX { runAutoX :: a -> m (Maybe b, AutoX m a b) }
 testAutoM :: Monad m => AutoX m a b -> [a] -> m ([Maybe b], AutoX m a b)
@@ -46,7 +105,7 @@ instance Monad m => Applicative (AutoX m r) where
                   (y, ay') <- runAutoX ay x
                   return  (f <*> y, af' <*> ay')
 
-instance Monad m => Arrow (AutoX m) where
+instance MonadFix m => Arrow (AutoX m) where
     arr f     = AConsX $ \x -> return (Just (f x), arr f)
     first a   = AConsX $ \(x, z) -> do
                   (y, a') <- runAutoX a x
@@ -63,7 +122,7 @@ instance Monad m => Arrow (AutoX m) where
                   (y2, a2') <- runAutoX a2 x
                   return (liftA2 (,) y1 y2, a1' &&& a2')
 
-instance Monad m => ArrowChoice (AutoX m) where
+instance MonadFix m => ArrowChoice (AutoX m) where
     left a = AConsX $ \x ->
                  case x of
                    Left l  -> do
@@ -79,7 +138,13 @@ instance Monad m => Alternative (AutoX m a) where
                   (y2, a2') <- runAutoX a2 x
                   return (y1 <|> y2, a1' <|> a2')
 
+instance MonadFix m => ArrowLoop (AutoX m) where
+    loop a = AConsX $ \x -> do
+         rec {(Just (y, d), a') <- runAutoX a (x, d)}
+         return (Just y, loop a')
 
+instance MonadFix m => ArrowInit (AutoX m) where
+    init b = AConsX $ \a -> return (Just b,Arrow.init a)
 -- urggghh my head hurt so much trying to write this in a clean way using
 -- recursive do notation instead of explicit calls to `mfix` and `fix`.
 -- Anyone want to submit a pull request? :)
@@ -116,7 +181,6 @@ summer = sumFrom 0
     sumFrom n = aCons $ \input ->
       let s = n + input
       in  ( s , sumFrom s )
-
 -- arrM: Converts an `a -> m b` into an always-on `AutoX` that just runs
 --      the function on the input and outputs the result.  Demonstrates the
 --      usage of the `aConsM` smart constructor.
