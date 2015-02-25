@@ -7,8 +7,10 @@ import GHC.Prim
 import Language.Haskell.TH.Syntax
 
 instance Lift a => Lift (Q a) where
-  lift x = x >>= \x -> [| return x |]
+   lift x = x >>= \x -> [| return x |]
 
+
+{-
 instance Lift Exp where
   lift (VarE name) = [|VarE name|]
   lift (ConE name) = [|ConE name|]
@@ -27,7 +29,6 @@ instance Lift Exp where
   lift (SigE e t) = [|SigE e t|]
   lift (RecConE n f) = [|RecConE n f|]
   lift (RecUpdE e f) = [|RecUpdE e f|]
-
 instance Lift Name where
   lift (Name o f) = [|Name o f|]
 
@@ -195,4 +196,4 @@ instance Lift Rational where
 instance Lift Double where
   lift d = [| D# $(return (LitE (DoublePrimL (toRational d)))) |]    
 
- 
+---}

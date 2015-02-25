@@ -1,7 +1,6 @@
 binary-ghc-args:
-- -O2
+- -O
 - -threaded
-- -ddump-simpl-stats
 - -fenable-rewrite-rules
 module-template: ! 'module MODULE_NAME where
 
@@ -37,5 +36,4 @@ ghc-args:
 - -ddump-simpl-stats
 - -fenable-rewrite-rules
 excluded-modules:
-- Language/Haskell/TH/Instances.hs
 - src/Examples.hs

@@ -11,7 +11,7 @@ import Control.CCA.Types hiding (init)
 import Control.CCA.CCNF
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
-import Language.Haskell.TH.Instances
+--import Language.Haskell.TH.Instances
 import Prelude hiding (init)
 
 arr :: ExpQ -> ExpQ
