@@ -16,6 +16,7 @@ import Prelude hiding ((.), id)
 import Data.Typeable
 import Control.Monad((>=>))
 import Control.Monad.Fix
+import qualified Debug.Trace as T
 
 type IOaction a b = a -> IO b
 -- | The free 'Arrow' for a 'Functor' @f@
@@ -27,14 +28,14 @@ data Arr f m a b where
     Effect :: f a b -> Arr f m a b
     (:***) :: Arr f m a b -> Arr f m c d -> Arr f m (a,c) (b,d)
     (:>>>) :: Arr f m a c -> Arr f m c b -> Arr f m a b
+    (:&&&) :: Arr f m a b -> Arr f m a b' -> Arr f m a (b,b')
     Loop :: Arr f m (a, d) (b, d) -> Arr f m a b
     LoopD :: e -> ((a, e) -> (b, e)) -> Arr f m a b
     Init :: b -> Arr f m b b
     Fan :: Arr f m a b -> Arr f m a c -> Arr f m a (b,c)
-
-
-
-
+--"andtojoin" forall f g. ((arr ( \(a,_) -> a)) >>> f) &&& ((arr ( \(_,a)->a)) >>> g) = T.trace "fired" $ f *** g
+--{-# RULES
+-- #-}
 instance Show (Arr f m a b) where
     show (Arr _) = "Arr"
     show (ArrM _) = "ArrM"
@@ -55,9 +56,11 @@ imap t (First f) = First (t f)
 --imap t (Arr f :>>> (g :>>> h)) = imap t $ (Arr f :>>> g) :>>> t h
 imap t (f :>>> g) = t f :>>> t g
 imap t (f :*** g) = t f :*** t g
+imap t (Fan f g) = Fan (t f) (t g)
 imap t (Loop f) = Loop (t f)
 --imap h (Lft
 imap t x = x
+
 
 norm :: (Functor m,MonadFix m) => Arr f m a b -> Arr f m a b
 norm (ArrM f :>>> Arr g) = ArrM (fmap g . f)

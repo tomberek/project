@@ -13,13 +13,29 @@ cabal-file: project.cabal
 version: 1
 extra-packages: ! 'Hackage: haskell-src 1.0.2.0
 
-  Hackage: CCA 0.1.5.2
+  Hackage: th-reify-many 0.1.2
+
+  Hackage: th-orphans 0.8.3
+
+  Hackage: haskell-src-meta 0.6.0.8
+
+  Hackage: text 1.2.0.4
+
+  Hackage: transformers 0.4.2.0
+
+  Hackage: mtl 2.2.1
+
+  Hackage: parsec-extra 0.1.0.5
+
+  Hackage: needle 0.1.0.1
 
 '
 ghc-args:
+- -fdefer-type-errors
 - -fno-warn-unused-matches
 - -fno-warn-unused-binds
 - -ddump-simpl-stats
 - -fenable-rewrite-rules
 excluded-modules:
+- Language/Haskell/TH/Instances.hs
 - src/Examples.hs

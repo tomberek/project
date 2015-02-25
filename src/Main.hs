@@ -19,6 +19,7 @@ import Arrow
 import           Auto
 import Data.List(intercalate)
 import Control.Concurrent
+import ExampleNeedle
 
 zero :: Int
 zero = 0
@@ -75,18 +76,23 @@ piTargeter = proc control -> do
 laggingSummer :: (Monad m,Num a) => a -> Arr (AutoX m) m a a
 laggingSummer initial = Effect summer >>> Arrow.init initial
 
+doubleGetter :: Arr (AutoXIO) IO (String,String) (Int,Int)
 doubleGetter = proc (a,b) -> do
-    (x,y) <- getURLSum *** getURLSum -< (a,b)
-    Arr (\(f,g)->f+g) -< (x,y)
+    z <- getURLSum *** getURLSum -< (a,b)
+    returnA -< z
 
 doubleGetter2 = proc (a,b) -> do
     x <- getURLSum -< a
     y <- getURLSum -< b
     returnA -< x+y
 
+--dg :: Arr (AutoX IO) IO String Int
+--dg
 main :: IO ()
 main = do
-    draw $ take 3 $ iterate normalize doubleGetter
+    draw $ take 2 $ iterate normalize test
+    putStrLn "break"
+    draw $ take 2 $ iterate normalize doubleGetter
     --urlChan <- newArrowChan $ evalA _ doubleGetter
     --out1 <- runKleisli urlChan ("http://example.com","http://google.com")
     --print line2
@@ -94,7 +100,7 @@ main = do
     --out1 <- runKleisli lineChan ("http://example.com","http://google.com")
     --print out1
     putStrLn "break"
-    draw $ take 3 $ iterate normalize doubleGetter2
+    draw $ take 2 $ iterate normalize doubleGetter2
     {-
     print line2
     print line3
