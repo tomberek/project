@@ -4,6 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE Arrows #-}
+{-# LANGUAGE TemplateHaskell #-}
 -- http://blog.jle.im/entry/effectful-recursive-real-world-autos-intro-to-machine
 --
 -- Auto with on/off behavior and effectful stepping.

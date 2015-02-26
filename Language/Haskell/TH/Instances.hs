@@ -9,7 +9,6 @@ import Language.Haskell.TH.Syntax
 instance Lift a => Lift (Q a) where
    lift x = x >>= \x -> [| return x |]
 
-
 {-
 instance Lift Exp where
   lift (VarE name) = [|VarE name|]
@@ -29,6 +28,7 @@ instance Lift Exp where
   lift (SigE e t) = [|SigE e t|]
   lift (RecConE n f) = [|RecConE n f|]
   lift (RecUpdE e f) = [|RecUpdE e f|]
+
 instance Lift Name where
   lift (Name o f) = [|Name o f|]
 

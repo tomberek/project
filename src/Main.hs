@@ -7,6 +7,7 @@
 {-# LANGUAGE Arrows               #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Main where
 import Control.Arrow
 
@@ -92,7 +93,7 @@ main :: IO ()
 main = do
     draw $ take 2 $ iterate normalize test
     putStrLn "break"
-    draw $ take 2 $ iterate normalize doubleGetter
+    --draw $ take 2 $ iterate normalize doubleGetter
     --urlChan <- newArrowChan $ evalA _ doubleGetter
     --out1 <- runKleisli urlChan ("http://example.com","http://google.com")
     --print line2

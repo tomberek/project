@@ -30,10 +30,6 @@ extra-packages: ! 'Hackage: haskell-src 1.0.2.0
 
 '
 ghc-args:
-- -fdefer-type-errors
-- -fno-warn-unused-matches
-- -fno-warn-unused-binds
-- -ddump-simpl-stats
 - -fenable-rewrite-rules
 excluded-modules:
 - src/Examples.hs

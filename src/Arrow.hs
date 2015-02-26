@@ -7,6 +7,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 -- originally from http://stackoverflow.com/questions/12001350/useful-operations-on-free-arrows
 -- then for inclusion in Control.Arrow.Free
 module Arrow where
@@ -21,6 +22,11 @@ import qualified Debug.Trace as T
 type IOaction a b = a -> IO b
 -- | The free 'Arrow' for a 'Functor' @f@
 data Arr f m a b where
+    Id2 :: Arr f m a a
+    Swap :: Arr f m (a,b) (b,a)
+    Pierce :: Arr f m (a,b) ((a,()),b)
+    Fst :: Arr f m (a,b) a
+    Raise :: Arr f m a (a,())
     Arr :: (a -> b) -> Arr f m a b
     ArrM :: (a -> m b) -> Arr f m a b
     First :: Arr f m a b -> Arr f m (a, d) (b, d)
@@ -34,8 +40,13 @@ data Arr f m a b where
     Init :: b -> Arr f m b b
     Fan :: Arr f m a b -> Arr f m a c -> Arr f m a (b,c)
 --"andtojoin" forall f g. ((arr ( \(a,_) -> a)) >>> f) &&& ((arr ( \(_,a)->a)) >>> g) = T.trace "fired" $ f *** g
---{-# RULES
--- #-}
+{-# RULES
+"id"    forall (f::forall a. a->a).    arr2 f = T.trace "pierce" $ Id2
+"pierce"forall (f::(a,b)->((a,()),b)). arr2 f = T.trace "pierce" $ Pierce
+"swap"  forall (f::(a,b)->(b,a)).      arr2 f = T.trace "swap" $ Swap
+"fst"   forall (f::(a,b)->a).          arr2 f = T.trace "fst" $ Fst
+"raise" forall (f::a->(a,())).         arr2 f = T.trace "raise" $ Raise
+ #-}
 instance Show (Arr f m a b) where
     show (Arr _) = "Arr"
     show (ArrM _) = "ArrM"
@@ -63,8 +74,6 @@ imap t x = x
 
 
 norm :: (Functor m,MonadFix m) => Arr f m a b -> Arr f m a b
-norm (ArrM f :>>> Arr g) = ArrM (fmap g . f)
-norm (Arr f :>>> ArrM g) = ArrM (g . f)
 --norm (Arr f :>>> (Arr g :>>> h)) = Arr (g.f) :>>> h
 --norm (ArrM f :>>> ArrM g) = ArrM (f >=> g)
 norm (First (ArrM f)) = ArrM $ \(a,b) -> do
@@ -86,7 +95,7 @@ norm (Loop (Arr f)) = Arr (trace f)
 norm (Init i) = LoopD i swap
 --norm (f :>>> g) = f :>>> norm g --added by Tom
 norm e = e
---normalize ArrowChoice? 
+--normalize ArrowChoice?
 
 everywhere :: Traversal f m -> Traversal f m
 everywhere h =h. imap (everywhere h)
@@ -116,11 +125,14 @@ effect :: eff a b -> Arr eff m a b
 effect = Effect
 
 instance Category (Arr eff m) where
-    id = Arr id
+    id = arr2 id
     (.) = flip (:>>>)
 
+{-# NOINLINE arr2 #-}
+arr2 :: (a->b) -> Arr f m a b
+arr2 = Arr
 instance Arrow (Arr eff m) where
-    arr = Arr
+    arr = arr2
     first = First
     second = Second
     (***) = (:***)
