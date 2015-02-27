@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -22,8 +23,9 @@ import Control.Concurrent.Async
 import Network.HTTP
 import Data.Time
 import Control.Concurrent (threadDelay)
+import Control.CCA.Types
 
-newtype AutoXIO a b = AutoXIO {runAutoXIO :: AutoX IO a b} deriving (Functor,Applicative,Category,Alternative,ArrowChoice,ArrowInit,ArrowLoop)
+newtype AutoXIO a b = AutoXIO {runAutoXIO :: AutoX IO a b} deriving (Functor,Applicative,Category,Alternative,ArrowChoice,ArrowLoop)
 autoIO :: (a -> IO (Maybe b, AutoX IO a b)) -> AutoXIO a b
 autoIO = AutoXIO . AConsX
 runAutoIO :: AutoXIO a b -> a -> IO (Maybe b, AutoX IO a b)
@@ -44,17 +46,14 @@ arrIO :: (a -> IO b) -> AutoXIO a b
 arrIO action = AutoXIO $ AConsX $ \a -> do
     b <- action a
     return (Just b,runAutoXIO $ arrIO action)
+arrMonad :: Monad m => (a -> m b) -> AutoX m a b
+arrMonad action = AConsX $ \a -> do
+    b <- action a
+    return (Just b,arrMonad action)
 --}
-getURLSum :: Arr f IO String Int
-getURLSum = Arr length <<< ArrM processURL
 
-processURL :: String -> IO String
-processURL a = do
-    getCurrentTime >>= print
-    threadDelay 1000000
-    response <- simpleHTTP (getRequest a)
-    getResponseBody response
 
+{--
 --line1 :: AutoXIO (String, String) ()
 line1 :: Arr f IO (String, String) ()
 line1 = proc (n,g) -> do
@@ -73,6 +72,8 @@ line2 = proc (x,y) -> do
     a <- getURLSum -< x
     b <- getURLSum -< y
     returnA -< a + b
+---}
+
 -- | The AutoX type: Auto with on/off behavior and effectful stepping.
 newtype AutoX m a b = AConsX { runAutoX :: a -> m (Maybe b, AutoX m a b) }
 testAutoM :: Monad m => AutoX m a b -> [a] -> m ([Maybe b], AutoX m a b)
@@ -145,7 +146,9 @@ instance MonadFix m => ArrowLoop (AutoX m) where
          return (Just y, loop a')
 
 instance MonadFix m => ArrowInit (AutoX m) where
-    init b = AConsX $ \a -> return (Just b,Arrow.init a)
+    type M (AutoX m) = m
+    init b = AConsX $ \a -> return (Just b,Control.CCA.Types.init a)
+    arrM'' = arrMonad
 -- urggghh my head hurt so much trying to write this in a clean way using
 -- recursive do notation instead of explicit calls to `mfix` and `fix`.
 -- Anyone want to submit a pull request? :)
@@ -185,10 +188,10 @@ summer = sumFrom 0
 -- arrM: Converts an `a -> m b` into an always-on `AutoX` that just runs
 --      the function on the input and outputs the result.  Demonstrates the
 --      usage of the `aConsM` smart constructor.
-arrM :: Monad m => (a -> m b) -> AutoX m a b
-arrM f = aConsM $ \x -> do
-                    y <- f x
-                    return (y, arrM f)
+arrMM :: Monad m => (a -> m b) -> AutoX m a b
+arrMM f = aConsM $ \x -> do
+                     y <- f x
+                     return (y, arrMM f)
 
 -- untilA: Lets all values pass through until the first one that satisfies
 --      the predicate.  Demonstrates the usage of the `aConsOn` smart

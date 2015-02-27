@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE Unsafe #-}
 {-# LANGUAGE KindSignatures #-}
@@ -18,6 +19,7 @@ import Data.Typeable
 import Control.Monad((>=>))
 import Control.Monad.Fix
 import qualified Debug.Trace as T
+import Control.CCA.Types
 
 type IOaction a b = a -> IO b
 -- | The free 'Arrow' for a 'Functor' @f@
@@ -49,6 +51,11 @@ data Arr f m a b where
  #-}
 instance Show (Arr f m a b) where
     show (Arr _) = "Arr"
+    show Raise = "Raise"
+    show Swap = "Swap"
+    show Fst = "Fst"
+    show Pierce = "Pierce"
+    show Id2 = "Id2"
     show (ArrM _) = "ArrM"
     show (First f) = "First " ++ show f
     show (Second f) = "Second " ++ show f
@@ -74,6 +81,7 @@ imap t x = x
 
 
 norm :: (Functor m,MonadFix m) => Arr f m a b -> Arr f m a b
+{-
 --norm (Arr f :>>> (Arr g :>>> h)) = Arr (g.f) :>>> h
 --norm (ArrM f :>>> ArrM g) = ArrM (f >=> g)
 norm (First (ArrM f)) = ArrM $ \(a,b) -> do
@@ -140,9 +148,9 @@ instance Arrow (Arr eff m) where
 instance ArrowLoop (Arr eff m) where
     loop = Loop
 instance ArrowInit (Arr eff m) where
+    type M (Arr eff m) = m
+    arrM'' = ArrM
     init = Init
-class ArrowLoop a => ArrowInit a where
-    init :: b -> a b b
 {--
 analyze :: forall f eff a0 b0 r. (Applicative f, Monoid r)
         => (forall a b. eff a b -> f r)

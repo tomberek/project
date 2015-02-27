@@ -9,22 +9,28 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Main where
-import Control.Arrow
+--import Control.Arrow
 
 import           Prelude                   hiding (id, (.))
 import           Control.Category
 import           Control.Monad.Trans --mtl
 import           Control.Monad.State
 import           System.IO.Unsafe
-import Arrow
-import           Auto
+import qualified Arrow as A
+import Auto
+--import           Auto
 import Data.List(intercalate)
 import Control.Concurrent
 import ExampleNeedle
+import Control.Arrow
+import Control.CCA
+import Control.CCA.CCNF
+import Control.CCA.Types
+import Examples
 
 zero :: Int
 zero = 0
-
+{-
 summerIO :: AutoX IO Int Int
 summerIO = summer
 
@@ -76,7 +82,7 @@ piTargeter = proc control -> do
 
 laggingSummer :: (Monad m,Num a) => a -> Arr (AutoX m) m a a
 laggingSummer initial = Effect summer >>> Arrow.init initial
-
+{-
 doubleGetter :: Arr (AutoXIO) IO (String,String) (Int,Int)
 doubleGetter = proc (a,b) -> do
     z <- getURLSum *** getURLSum -< (a,b)
@@ -86,12 +92,23 @@ doubleGetter2 = proc (a,b) -> do
     x <- getURLSum -< a
     y <- getURLSum -< b
     returnA -< x+y
+---}
+---}
+d :: A.Arr AutoXIO IO Int Int
+d = $(norm testOsc)
 
---dg :: Arr (AutoX IO) IO String Int
---dg
+e :: A.Arr AutoXIO IO String Int
+e = $(norm getURLSum)
+
+f :: A.Arr AutoXIO IO (String,String) (Int,Int)
+f = $(norm getURLSum3)
+
 main :: IO ()
 main = do
-    draw $ take 2 $ iterate normalize test
+    putStrLn $ show d
+    putStrLn $ show e
+    putStrLn $ show f
+    -- draw $ take 2 $ iterate normalize test
     putStrLn "break"
     --draw $ take 2 $ iterate normalize doubleGetter
     --urlChan <- newArrowChan $ evalA _ doubleGetter
@@ -101,7 +118,7 @@ main = do
     --out1 <- runKleisli lineChan ("http://example.com","http://google.com")
     --print out1
     putStrLn "break"
-    draw $ take 2 $ iterate normalize doubleGetter2
+    --draw $ take 2 $ iterate normalize doubleGetter2
     {-
     print line2
     print line3
@@ -111,6 +128,7 @@ main = do
 
 draw x = putStrLn $ intercalate "\n\n" $ map show x
 -- ***************** HELPING Functions ******
+{-
 forkArrow :: AutoXIO b c -> ArrowChan IO c b -> IO ThreadId
 forkArrow (AutoXIO arrow) (ArrowChan writer reader) =
     let action arrowAction = do
@@ -151,4 +169,5 @@ stay= takeMVar rexit
 (!>) :: a -> b -> a
 (!>) = const .id
 infixr 0 !>
+---}
 

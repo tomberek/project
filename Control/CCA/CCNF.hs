@@ -1,3 +1,5 @@
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE CPP, TemplateHaskell, FlexibleInstances #-}
 
 module Control.CCA.CCNF 
@@ -5,10 +7,19 @@ module Control.CCA.CCNF
    pprNorm, pprNormOpt, printCCA, ASyn,
    cross, dup, swap, assoc, unassoc, juggle, trace, mirror, untag, tagT, untagT) where
 
+#if __GLASGOW_HASKELL__ >= 610
+
 import Control.Category
 import Prelude hiding ((.), id, init)
+import Control.Monad.Identity
 
-import Control.Arrow 
+#else
+
+import Prelude hiding (init)
+
+#endif
+
+import Control.Arrow
 import Control.CCA.Types
 import Data.Char (isAlpha)
 import Language.Haskell.TH
@@ -16,15 +27,17 @@ import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Instances
 import qualified Data.Generics as G (everywhere, mkT)
 
---Internal Representation
+-- Internal Representation
 -- =======================
---
+
 --We use AExp to syntactically represent an arrow for normalization purposes. 
 
 data AExp
   = Arr ExpQ
+  | ArrM ExpQ
   | First AExp
   | AExp :>>> AExp
+  | AExp :*** AExp
   | Loop AExp
   | LoopD ExpQ ExpQ -- loop with initialized feedback
   | Init ExpQ
@@ -34,31 +47,45 @@ infixl 1 :>>>
 
 --We use phantom types to make ASyn an Arrow.
 
-newtype ASyn b c = AExp AExp 
+newtype ASyn (m :: * -> * ) b c = AExp AExp
 
+#if __GLASGOW_HASKELL__ >= 610
 
-instance Category ASyn where
+instance Category (ASyn m) where
   id = AExp (Arr [|\x -> x|])
   AExp g . AExp f = AExp (f :>>> g)
 
-instance Arrow ASyn where
-  arr f = error "use arr' instead" 
+instance Arrow (ASyn m) where
+  arr f = error "use arr' instead"
+  first (AExp f) = AExp (First f)
+  (AExp f) *** (AExp g) = AExp (f :*** g)
+
+#else
+
+instance Arrow (ASyn m) where
+  arr f = error "use arr' instead2"
+  AExp f >>> AExp g = AExp (f :>>> g)
   first (AExp f) = AExp (First f)
 
-instance ArrowLoop ASyn where
+#endif
+
+instance ArrowLoop (ASyn m) where
   loop (AExp f) = AExp (Loop f)
 
-instance ArrowInit ASyn where
+instance Monad m => ArrowInit (ASyn m) where
+  type M (ASyn m) = m
   init i = error "use init' instead"
   arr' f _ = AExp (Arr f)
+  arrM' f _ = AExp (ArrM f)
+  arrM'' _ = error "use arrM' instead"
   init' i _ = AExp (Init i)
 
 
-{- ArrowChoice only requires definition for 'left', but the default implementation
-for 'right' and '|||' uses arr so we need to redefine them using arr' here.
-'+++' is also redefined here for completeness.
----}
-instance ArrowChoice ASyn where
+--ArrowChoice only requires definition for 'left', but the default implementation
+--for 'right' and '|||' uses arr so we need to redefine them using arr' here.
+--'+++' is also redefined here for completeness.
+
+instance Monad m => ArrowChoice (ASyn m) where
   left (AExp f) = AExp (Lft f)
   right f = arr' [| mirror |] mirror >>> left f
             >>> arr' [| mirror |] mirror
@@ -89,29 +116,32 @@ imap h x = x
 everywhere :: Traversal -> Traversal 
 everywhere h = h . imap (everywhere h)
 
-{-
-Normalization
-=============
+--Normalization
+-- =============
 
-norm is a TH function that normalizes a given CCA, e.g., $(norm e) will
-give the CCNF of e. 
----}
-norm :: ASyn t t1 -> ExpQ         -- returns a generic ArrowInit arrow
+--norm is a TH function that normalizes a given CCA, e.g., $(norm e) will
+--give the CCNF of e. 
+
+norm :: ASyn m t t1 -> ExpQ         -- returns a generic ArrowInit arrow
 norm (AExp e) = fromAExp (normE e)
 normE = everywhere normalize 
 
-{-
-normOpt returns the pair of state and pure function as (i, f) from optimized 
-CCNF in the form loopD i (arr f). 
----}
-normOpt :: ASyn t t1 -> ExpQ      -- returns a pair of state and pure function (s, f)
-normOpt (AExp e) = 
+--normOpt returns the pair of state and pure function as (i, f) from optimized 
+--CCNF in the form loopD i (arr f). 
+
+normOpt :: ASyn m t t1 -> ExpQ      -- returns a pair of state and pure function (s, f)
+normOpt (AExp e) =
   case normE e of
     LoopD i f -> tupE [i, f]
     Arr f     -> [| ( (), $(f) ) |]
+    ArrM f    -> [| ( (), $(f) ) |]
+    First f   -> [| ( (), "First" ) |]
+    Init f    -> [| ( (), $(f) ) |]
+    Lft f     -> [| ( (), "Lft" ) |]
+    f :>>> g  -> [| ( (), ":>>>" ) |]
     _         -> error "The given arrow can't be normalized to optimized CCNF."
 
---pprNorm and pprNormOpt return the pretty printed normal forms as a 
+--pprNorm and pprNormOpt return the pretty printed normal forms as a
 --string.
 
 pprNorm = ppr' . norm
@@ -122,19 +152,20 @@ ppr' e = runQ (fmap toLet e) >>= litE . StringL . simplify . pprint
 
 fromAExp :: AExp -> ExpQ
 fromAExp (Arr f) = appE [|arr|] f
+fromAExp (ArrM f) =  appE [| arrM'' |] f
 fromAExp (First f) = appE [|first|] (fromAExp f)
 fromAExp (f :>>> g) = infixE (Just (fromAExp f)) [|(>>>)|] (Just (fromAExp g))
+fromAExp (f :*** g) = infixE (Just (fromAExp f)) [|(***)|] (Just (fromAExp g))
 fromAExp (Loop f) = appE [|loop|] (fromAExp f)
 fromAExp (LoopD i f) = appE (appE [|loopD|] i) f
 fromAExp (Init i) = appE [|init|] i
 fromAExp (Lft f) = appE [|left|] (fromAExp f)
 
-{-
-CCNF
-====
+--CCNF
+-- ====
 
-Arrow laws:
----}
+--Arrow laws:
+
 normalize (Arr f :>>> Arr g) = Arr (g `o` f)
 normalize (First (Arr f)) = Arr (f `crossE` idE)
 normalize (Arr f :>>> LoopD i g) = LoopD i (g `o` (f `crossE` idE))
@@ -153,14 +184,14 @@ normalize (Lft (LoopD i f)) = LoopD i (untagE `o` lftE f `o` tagE)
 --All the other cases are unchanged. 
 
 normalize e = e 
-{-
-To Let-Expression
-=================
 
-Transform function applications to let-expressions.
+--To Let-Expression
+-- =================
 
-  (\x -> e1) e2  === let x = e2 in e1
----}
+--Transform function applications to let-expressions.
+
+--  (\x -> e1) e2  === let x = e2 in e1
+
 toLet :: Exp -> Exp
 toLet = G.everywhere (G.mkT aux)
   where
@@ -168,10 +199,9 @@ toLet = G.everywhere (G.mkT aux)
     aux (AppE (LamE (pat:ps) body) arg) = LamE ps (LetE [ValD pat (NormalB arg) []] body)
     aux x = x
 
-{-
-Auxiliary Functions
-===================
----}
+-- Auxiliary Functions
+-- ===================
+
 dup x = (x, x)
 swap (x, y) = (y, x)
 unassoc (x, (y, z)) = ((x, y), z)
@@ -185,14 +215,14 @@ untag (Left x) = x
 untag (Right y) = y
 lft f x = case x of
   Left  u -> Left (f u)
-  Right u -> Right u
+  Right u -> Right u 
 tagT (x, y) = case x of
   Left  u -> Left  (u, y)
   Right u -> Right (u, y)
 untagT z = case z of
   Left  (x, y) -> (Left  x, y)
   Right (x, y) -> (Right x, y)
-
+ 
 o :: ExpQ -> ExpQ -> ExpQ
 f `o` g = appE (appE [|(.)|] f) g
 f `crossE` g = appE (appE [|cross|] f) g

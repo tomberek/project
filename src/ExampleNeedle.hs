@@ -2,10 +2,15 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 module ExampleNeedle where
+--import Auto
+--import Arrow
+import Control.CCA.Types
+
+import Network.HTTP
+import Data.Time
 import Control.Arrow
-import Auto
-import Arrow
-import Control.CCA
+import Control.Concurrent (threadDelay)
+import Language.Haskell.TH
 {-
 test :: Arr (AutoXIO) IO (String,String) (Int,Int)
 test = [nd|
@@ -13,8 +18,3 @@ test = [nd|
     }==={getURLSum}===>
 |]
 ---}
---test :: ArrowInit a -> a (String,String) (Int,Int)
-test = proc (a,b) -> do
-    x <- getURLSum -< a
-    y <- getURLSum -< b
-    returnA -< (x,y)
